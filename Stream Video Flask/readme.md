@@ -28,7 +28,7 @@ The project requires Python and several Python packages. The full list of requir
 
 1. Clone this repository:
    ```
-   git clone https://github.com/yourusername/Server.git
+   git clone https://github.com/ibrahimmansur4/Server.git
    
    cd Server/Stream\ Video\ Flask/
    ```

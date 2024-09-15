@@ -1,42 +1,79 @@
-# Stream Video Flask
+# Flask Server Basic
 
-## Project Overview
+This project is a basic Flask server setup with SSL support.
 
-This project is a Flask application designed to stream video content. It leverages the Flask framework and possibly OpenCV for video processing. 
+## Project Structure
 
-## Features
-
-* **Video Streaming:** The application is capable of streaming video files or live video feeds from a camera.
-* **Web Interface:** A web interface built using HTML templates allows users to access and control the video streaming functionality.
-
-## Installation
+## Setup
 
 1. **Create a virtual environment:**
-   ```bash
-   python3 -m venv venv
-   ```
+    ```sh
+    python3 -m venv venv
+    ```
 
 2. **Activate the virtual environment:**
-   ```bash
-   source venv/bin/activate 
-   ```
+    ```sh
+    source venv/bin/activate
+    ```
 
-3. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+3. **Install the dependencies:**
+    ```sh
+    pip install -r requirements.txt
+    ```
 
-## Usage
+## Running the Server
 
-1. **Start the Flask application:**
-   ```bash
-   flask run
-   ```
-   This will start the development server, typically accessible at `http://127.0.0.1:5000/`.
+1. **Run the Flask server:**
+    ```sh
+    python app.py
+    ```
 
-2. **Access the web interface:**
-   Open the address specified in the terminal (e.g., `http://127.0.0.1:5000/`) in your web browser.
+2. **Access the server:**
+    Open your browser and navigate to `https://localhost:5000`.
 
-## License
+## SSL Certificates
 
-This project is licensed under the MIT License. 
+- `cert.pem`: SSL certificate file.
+- `key.pem`: SSL key file.
+
+
+## Templates
+
+HTML templates are stored in the `templates/` directory.
+
+# Stream Video Flask
+
+This project is a Flask application for streaming video.
+
+## Project Structure
+
+## Setup
+
+1. **Create a virtual environment:**
+    ```sh
+    python3 -m venv venv
+    ```
+
+2. **Activate the virtual environment:**
+    ```sh
+    source venv/bin/activate
+    ```
+
+3. **Install the dependencies:**
+    ```sh
+    pip install -r requirements.txt
+    ```
+
+## Running the Server
+
+1. **Run the Flask server:**
+    ```sh
+    python app.py
+    ```
+
+2. **Access the server:**
+    Open your browser and navigate to `http://localhost:5000`.
+
+## Templates
+
+HTML templates are stored in the `templates/` directory.
