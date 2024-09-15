@@ -1,4 +1,5 @@
-# Flask Server Basic
+<details>
+<summary> Flask Server Basic</summary>
 
 This project is a basic Flask server setup with SSL support.
 
@@ -36,12 +37,14 @@ This project is a basic Flask server setup with SSL support.
 - `cert.pem`: SSL certificate file.
 - `key.pem`: SSL key file.
 
-
 ## Templates
 
 HTML templates are stored in the `templates/` directory.
 
-# Stream Video Flask
+</details>
+
+<details>
+<summary>Stream Video Flask</summary>
 
 This project is a Flask application for streaming video.
 
@@ -77,3 +80,5 @@ This project is a Flask application for streaming video.
 ## Templates
 
 HTML templates are stored in the `templates/` directory.
+
+</details>
