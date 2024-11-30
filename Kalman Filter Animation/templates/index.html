@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kalman Filter Animation</title>
+    <style>
+        canvas {
+            border: 1px solid #000;
+            margin: 20px;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: Arial, sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>1D Kalman Filter Animation</h1>
+        <canvas id="kalmanCanvas" width="800" height="400"></canvas>
+        <div>
+            <button onclick="startAnimation()">Start</button>
+            <button onclick="resetAnimation()">Reset</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('kalmanCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let animationId;
+        let measurements = [];
+        let estimates = [];
+        let truePositions = [];
+        let currentStep = 0;
+        
+        // Kalman Filter parameters
+        const Q = 0.1;  // Process noise
+        const R = 1.0;  // Measurement noise
+        let x = 0;      // Initial state
+        let P = 1.0;    // Initial uncertainty
+        
+        function generateData() {
+            truePositions = [];
+            measurements = [];
+            estimates = [];
+            
+            // Generate true positions (constant velocity with small noise)
+            let true_pos = 200;
+            for (let i = 0; i < 100; i++) {
+                true_pos += 2 + Math.random() * 0.5;
+                truePositions.push(true_pos);
+                // Generate noisy measurements
+                measurements.push(true_pos + (Math.random() - 0.5) * 20);
+            }
+        }
+        
+        function kalmanStep(measurement) {
+            // Predict
+            let x_pred = x;
+            let P_pred = P + Q;
+            
+            // Update
+            let K = P_pred / (P_pred + R);
+            x = x_pred + K * (measurement - x_pred);
+            P = (1 - K) * P_pred;
+            
+            return x;
+        }
+        
+        function drawFrame() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw grid
+            ctx.strokeStyle = '#eee';
+            ctx.beginPath();
+            for (let i = 0; i < canvas.width; i += 50) {
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i, canvas.height);
+            }
+            for (let i = 0; i < canvas.height; i += 50) {
+                ctx.moveTo(0, i);
+                ctx.lineTo(canvas.width, i);
+            }
+            ctx.stroke();
+            
+            // Draw data points
+            for (let i = 0; i < currentStep; i++) {
+                // Draw true position
+                ctx.fillStyle = 'green';
+                ctx.beginPath();
+                ctx.arc(i * 8, truePositions[i], 2, 0, 2 * Math.PI);
+                ctx.fill();
+                
+                // Draw measurements
+                ctx.fillStyle = 'red';
+                ctx.beginPath();
+                ctx.arc(i * 8, measurements[i], 2, 0, 2 * Math.PI);
+                ctx.fill();
+                
+                // Draw estimates
+                ctx.fillStyle = 'blue';
+                ctx.beginPath();
+                ctx.arc(i * 8, estimates[i], 2, 0, 2 * Math.PI);
+                ctx.fill();
+            }
+            
+            // Draw legend
+            ctx.font = '12px Arial';
+            ctx.fillStyle = 'green';
+            ctx.fillText('True Position', 650, 20);
+            ctx.fillStyle = 'red';
+            ctx.fillText('Measurements', 650, 40);
+            ctx.fillStyle = 'blue';
+            ctx.fillText('Kalman Filter', 650, 60);
+        }
+        
+        function animate() {
+            if (currentStep < measurements.length) {
+                estimates.push(kalmanStep(measurements[currentStep]));
+                currentStep++;
+                drawFrame();
+                animationId = requestAnimationFrame(animate);
+            }
+        }
+        
+        function startAnimation() {
+            if (!animationId) {
+                animate();
+            }
+        }
+        
+        function resetAnimation() {
+            cancelAnimationFrame(animationId);
+            animationId = null;
+            currentStep = 0;
+            x = 0;
+            P = 1.0;
+            generateData();
+            drawFrame();
+        }
+        
+        // Initialize
+        generateData();
+        drawFrame();
+    </script>
+</body>
+</html>
