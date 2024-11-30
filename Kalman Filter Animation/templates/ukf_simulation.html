@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unscented Kalman Filter Simulation</title>
+    <style>
+        canvas {
+            border: 1px solid #000;
+            margin: 20px;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: Arial, sans-serif;
+        }
+        .controls {
+            margin: 10px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }
+        .info {
+            font-family: monospace;
+            margin: 10px;
+            padding: 10px;
+            background-color: #f8f8f8;
+            border-radius: 5px;
+            white-space: pre;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Unscented Kalman Filter - 2D Motion Tracking</h1>
+        <canvas id="ukfCanvas" width="800" height="600"></canvas>
+        <div class="controls">
+            <button onclick="startAnimation()">Start</button>
+            <button onclick="resetAnimation()">Reset</button>
+        </div>
+        <div class="info" id="stateInfo"></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('ukfCanvas');
+        const ctx = canvas.getContext('2d');
+        const stateInfo = document.getElementById('stateInfo');
+        
+        let animationId;
+        let time = 0;
+        const dt = 0.1; // Time step
+
+        // State dimensions
+        const n = 4; // State dimension [x, y, vx, vy]
+        const m = 2; // Measurement dimension [x, y]
+
+        // UKF parameters
+        const alpha = 0.1;    // Spread of sigma points
+        const beta = 2.0;     // Prior knowledge of state distribution (2 for Gaussian)
+        const kappa = 0.0;    // Secondary scaling parameter
+        const lambda = alpha * alpha * (n + kappa) - n;
+
+        // Weights for mean and covariance
+        const weights_m = new Array(2 * n + 1);
+        const weights_c = new Array(2 * n + 1);
+        
+        weights_m[0] = lambda / (n + lambda);
+        weights_c[0] = lambda / (n + lambda) + (1 - alpha * alpha + beta);
+        
+        for (let i = 1; i < 2 * n + 1; i++) {
+            weights_m[i] = 1 / (2 * (n + lambda));
+            weights_c[i] = weights_m[i];
+        }
+
+        // State vector: [x, y, vx, vy]
+        let trueState = [400, 300, 30, 20];
+        let estimatedState = [400, 300, 30, 20];
+        
+        // Covariance matrix
+        let P = [
+            [10, 0, 0, 0],
+            [0, 10, 0, 0],
+            [0, 0, 10, 0],
+            [0, 0, 0, 10]
+        ];
+
+        // Process noise
+        const Q = [
+            [0.1, 0, 0, 0],
+            [0, 0.1, 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1]
+        ];
+
+        // Measurement noise
+        const R = [
+            [10, 0],
+            [0, 10]
+        ];
+
+        // History for plotting
+        let trueTrajectory = [];
+        let measurements = [];
+        let estimatedTrajectory = [];
+
+        function matrixMultiply(a, b) {
+            const aRows = a.length;
+            const aCols = a[0].length;
+            const bCols = b[0].length;
+            const result = Array(aRows).fill().map(() => Array(bCols).fill(0));
+
+            for (let i = 0; i < aRows; i++) {
+                for (let j = 0; j < bCols; j++) {
+                    for (let k = 0; k < aCols; k++) {
+                        result[i][j] += a[i][k] * b[k][j];
+                    }
+                }
+            }
+            return result;
+        }
+
+        function matrixAdd(a, b) {
+            return a.map((row, i) => row.map((val, j) => val + b[i][j]));
+        }
+
+        function matrixSubtract(a, b) {
+            return a.map((row, i) => row.map((val, j) => val - b[i][j]));
+        }
+
+        function transpose(matrix) {
+            return matrix[0].map((_, i) => matrix.map(row => row[i]));
+        }
+
+        function choleskyDecomposition(matrix) {
+            const n = matrix.length;
+            const L = Array(n).fill().map(() => Array(n).fill(0));
+
+            for (let i = 0; i < n; i++) {
+                for (let j = 0; j <= i; j++) {
+                    let sum = 0;
+                    for (let k = 0; k < j; k++) {
+                        sum += L[i][k] * L[j][k];
+                    }
+                    if (i === j) {
+                        L[i][j] = Math.sqrt(Math.max(matrix[i][i] - sum, 0));
+                    } else {
+                        L[i][j] = (matrix[i][j] - sum) / L[j][j];
+                    }
+                }
+            }
+            return L;
+        }
+
+        function generateSigmaPoints(state, covariance) {
+            const L = choleskyDecomposition(covariance);
+            const sigmaPoints = [state];
+            
+            const scaling = Math.sqrt(n + lambda);
+            
+            for (let i = 0; i < n; i++) {
+                const term = L[i].map(x => x * scaling);
+                sigmaPoints.push(state.map((x, j) => x + term[j]));
+                sigmaPoints.push(state.map((x, j) => x - term[j]));
+            }
+            
+            return sigmaPoints;
+        }
+
+        function predictState(state) {
+            return [
+                state[0] + state[2] * dt,
+                state[1] + state[3] * dt,
+                state[2],
+                state[3]
+            ];
+        }
+
+        function measurementFunction(state) {
+            return [state[0], state[1]];
+        }
+
+        function unscented_kalman_filter(measurement_vec) {
+            // Generate sigma points
+            const sigmaPoints = generateSigmaPoints(estimatedState, P);
+            
+            // Predict
+            const predictedSigmaPoints = sigmaPoints.map(point => predictState(point));
+            
+            // Calculate predicted mean
+            let predictedState = Array(n).fill(0);
+            for (let i = 0; i < 2 * n + 1; i++) {
+                for (let j = 0; j < n; j++) {
+                    predictedState[j] += weights_m[i] * predictedSigmaPoints[i][j];
+                }
+            }
+            
+            // Calculate predicted covariance
+            let predictedP = Array(n).fill().map(() => Array(n).fill(0));
+            for (let i = 0; i < 2 * n + 1; i++) {
+                const diff = predictedSigmaPoints[i].map((v, j) => v - predictedState[j]);
+                for (let j = 0; j < n; j++) {
+                    for (let k = 0; k < n; k++) {
+                        predictedP[j][k] += weights_c[i] * diff[j] * diff[k];
+                    }
+                }
+            }
+            
+            // Add process noise
+            predictedP = matrixAdd(predictedP, Q);
+            
+            // Transform sigma points through measurement function
+            const measurementSigmaPoints = predictedSigmaPoints.map(point => measurementFunction(point));
+            
+            // Calculate predicted measurement
+            let predictedMeasurement = Array(m).fill(0);
+            for (let i = 0; i < 2 * n + 1; i++) {
+                for (let j = 0; j < m; j++) {
+                    predictedMeasurement[j] += weights_m[i] * measurementSigmaPoints[i][j];
+                }
+            }
+            
+            // Calculate measurement covariance
+            let S = Array(m).fill().map(() => Array(m).fill(0));
+            let Pxz = Array(n).fill().map(() => Array(m).fill(0));
+            
+            for (let i = 0; i < 2 * n + 1; i++) {
+                const diffZ = measurementSigmaPoints[i].map((v, j) => v - predictedMeasurement[j]);
+                const diffX = predictedSigmaPoints[i].map((v, j) => v - predictedState[j]);
+                
+                for (let j = 0; j < m; j++) {
+                    for (let k = 0; k < m; k++) {
+                        S[j][k] += weights_c[i] * diffZ[j] * diffZ[k];
+                    }
+                    
+                    for (let k = 0; k < n; k++) {
+                        Pxz[k][j] += weights_c[i] * diffX[k] * diffZ[j];
+                    }
+                }
+            }
+            
+            // Add measurement noise
+            S = matrixAdd(S, R);
+            
+            // Calculate Kalman gain
+            const S_inv = invertMatrix2x2(S);
+            const K = matrixMultiply(Pxz, S_inv);
+            
+            // Update state and covariance
+            const innovation = [
+                measurement_vec[0] - predictedMeasurement[0],
+                measurement_vec[1] - predictedMeasurement[1]
+            ];
+            
+            estimatedState = predictedState.map((val, i) => {
+                let correction = 0;
+                for (let j = 0; j < m; j++) {
+                    correction += K[i][j] * innovation[j];
+                }
+                return val + correction;
+            });
+            
+            const KS = matrixMultiply(K, S);
+            const KPxz = matrixMultiply(KS, transpose(K));
+            P = matrixSubtract(predictedP, KPxz);
+            
+            return estimatedState;
+        }
+
+        function invertMatrix2x2(matrix) {
+            const det = matrix[0][0] * matrix[1][1] - matrix[0][1] * matrix[1][0];
+            if (Math.abs(det) < 1e-10) return null;
+            
+            return [
+                [matrix[1][1] / det, -matrix[0][1] / det],
+                [-matrix[1][0] / det, matrix[0][0] / det]
+            ];
+        }
+
+        function generateMeasurement(trueState) {
+            const noise_x = (Math.random() - 0.5) * Math.sqrt(R[0][0]);
+            const noise_y = (Math.random() - 0.5) * Math.sqrt(R[1][1]);
+            return [
+                trueState[0] + noise_x,
+                trueState[1] + noise_y
+            ];
+        }
+
+        function updateTrueState() {
+            // Add some random acceleration
+            trueState[2] += (Math.random() - 0.5) * 1;
+            trueState[3] += (Math.random() - 0.5) * 1;
+            
+            // Update position
+            trueState[0] += trueState[2] * dt;
+            trueState[1] += trueState[3] * dt;
+
+            // Bounce off walls
+            if (trueState[0] < 0 || trueState[0] > canvas.width) {
+                trueState[2] *= -0.8;
+                trueState[0] = Math.max(0, Math.min(canvas.width, trueState[0]));
+            }
+            if (trueState[1] < 0 || trueState[1] > canvas.height) {
+                trueState[3] *= -0.8;
+                trueState[1] = Math.max(0, Math.min(canvas.height, trueState[1]));
+            }
+        }
+
+        function drawFrame() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw grid
+            ctx.strokeStyle = '#eee';
+            ctx.beginPath();
+            for (let i = 0; i < canvas.width; i += 50) {
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i, canvas.height);
+            }
+            for (let i = 0; i < canvas.height; i += 50) {
+                ctx.moveTo(0, i);
+                ctx.lineTo(canvas.width, i);
+            }
+            ctx.stroke();
+
+            // Draw trajectories
+            ctx.lineWidth = 1;
+            
+            // True trajectory
+            ctx.strokeStyle = 'green';
+            ctx.beginPath();
+            trueTrajectory.forEach((pos, i) => {
+                if (i === 0) ctx.moveTo(pos[0], pos[1]);
+                else ctx.lineTo(pos[0], pos[1]);
+            });
+            ctx.stroke();
+
+            // Measurements
+            ctx.fillStyle = 'red';
+            measurements.forEach(pos => {
+                ctx.beginPath();
+                ctx.arc(pos[0], pos[1], 2, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+
+            // Estimated trajectory
+            ctx.strokeStyle = 'blue';
+            ctx.beginPath();
+            estimatedTrajectory.forEach((pos, i) => {
+                if (i === 0) ctx.moveTo(pos[0], pos[1]);
+                else ctx.lineTo(pos[0], pos[1]);
+            });
+            ctx.stroke();
+
+            // Current positions
+            ctx.fillStyle = 'green';
+            ctx.beginPath();
+            ctx.arc(trueState[0], trueState[1], 5, 0, 2 * Math.PI);
+            ctx.fill();
+
+            ctx.fillStyle = 'blue';
+            ctx.beginPath();
+            ctx.arc(estimatedState[0], estimatedState[1], 5, 0, 2 * Math.PI);
+            ctx.fill();
+
+            // Draw velocity vectors
+            const scale = 2;
+            ctx.strokeStyle = 'green';
+            drawArrow(trueState[0], trueState[1], trueState[2] * scale, trueState[3] * scale);
+            
+            ctx.strokeStyle = 'blue';
+            drawArrow(estimatedState[0], estimatedState[1], estimatedState[2] * scale, estimatedState[3] * scale);
+
+            // Draw legend
+            ctx.font = '12px Arial';
+            ctx.fillStyle = 'green';
+            ctx.fillText('True State', 650, 20);
+            ctx.fillStyle = 'red';
+            ctx.fillText('Measurements', 650, 40);
+            ctx.fillStyle = 'blue';
+            ctx.fillText('UKF Estimate', 650, 60);
+
+            // Update state info
+            stateInfo.textContent = `
+True State:     x: ${trueState[0].toFixed(1)}, y: ${trueState[1].toFixed(1)}, vx: ${trueState[2].toFixed(1)}, vy: ${trueState[3].toFixed(1)}
+Estimated: x: ${estimatedState[0].toFixed(1)}, y: ${estimatedState[1].toFixed(1)}, vx: ${estimatedState[2].toFixed(1)}, vy: ${estimatedState[3].toFixed(1)}
+            `;
+        }
+
+        function drawArrow(x, y, vx, vy) {
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x + vx, y + vy);
+            ctx.stroke();
+        }
+
+        function animate() {
+            updateTrueState();
+            
+            // Generate measurement
+            let measurement = generateMeasurement(trueState);
+            
+            // Apply UKF
+            unscented_kalman_filter(measurement);
+
+            // Store history
+            trueTrajectory.push([trueState[0], trueState[1]]);
+            measurements.push(measurement);
+            estimatedTrajectory.push([estimatedState[0], estimatedState[1]]);
+
+            // Limit history length
+            const maxHistory = 100;
+            if (trueTrajectory.length > maxHistory) {
+                trueTrajectory.shift();
+                measurements.shift();
+                estimatedTrajectory.shift();
+            }
+
+            drawFrame();
+            time += dt;
+            animationId = requestAnimationFrame(animate);
+        }
+
+        function startAnimation() {
+            if (!animationId) {
+                animate();
+            }
+        }
+
+        function resetAnimation() {
+            cancelAnimationFrame(animationId);
+            animationId = null;
+            time = 0;
+            trueState = [400, 300, 30, 20];
+            estimatedState = [400, 300, 30, 20];
+            P = [
+                [10, 0, 0, 0],
+                [0, 10, 0, 0],
+                [0, 0, 10, 0],
+                [0, 0, 0, 10]
+            ];
+            trueTrajectory = [];
+            measurements = [];
+            estimatedTrajectory = [];
+            drawFrame();
+        }
+
+        // Initialize
+        drawFrame();
+    </script>
+</body>
+</html>

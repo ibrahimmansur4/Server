@@ -36,26 +36,28 @@
         let estimates = [];
         let truePositions = [];
         let currentStep = 0;
+        let time = 0;
         
         // Kalman Filter parameters
-        const Q = 0.1;  // Process noise
-        const R = 1.0;  // Measurement noise
-        let x = 0;      // Initial state
-        let P = 1.0;    // Initial uncertainty
+        const Q = 0.5;    // Process noise (increased for more dynamic system)
+        const R = 2.0;    // Measurement noise
+        let x = 200;      // Initial state
+        let P = 1.0;      // Initial uncertainty
         
-        function generateData() {
-            truePositions = [];
-            measurements = [];
-            estimates = [];
+        function generateNewDataPoint() {
+            // Generate true position using multiple sine waves for complexity
+            let true_pos = 200 + 
+                50 * Math.sin(time * 0.05) +  // Slow wave
+                20 * Math.sin(time * 0.15) +  // Medium wave
+                10 * Math.sin(time * 0.3);    // Fast wave
             
-            // Generate true positions (constant velocity with small noise)
-            let true_pos = 200;
-            for (let i = 0; i < 100; i++) {
-                true_pos += 2 + Math.random() * 0.5;
-                truePositions.push(true_pos);
-                // Generate noisy measurements
-                measurements.push(true_pos + (Math.random() - 0.5) * 20);
-            }
+            // Add random walk component
+            true_pos += (Math.random() - 0.5) * 2;
+            
+            // Generate noisy measurement
+            let measurement = true_pos + (Math.random() - 0.5) * 40; // Increased noise
+            
+            return { true_pos, measurement };
         }
         
         function kalmanStep(measurement) {
@@ -88,23 +90,28 @@
             ctx.stroke();
             
             // Draw data points
-            for (let i = 0; i < currentStep; i++) {
+            const maxPoints = Math.floor(canvas.width / 2); // Show more points
+            const startIdx = Math.max(0, truePositions.length - maxPoints);
+            
+            for (let i = startIdx; i < truePositions.length; i++) {
+                const x = (i - startIdx) * 2; // Adjust point spacing
+                
                 // Draw true position
                 ctx.fillStyle = 'green';
                 ctx.beginPath();
-                ctx.arc(i * 8, truePositions[i], 2, 0, 2 * Math.PI);
+                ctx.arc(x, truePositions[i], 2, 0, 2 * Math.PI);
                 ctx.fill();
                 
                 // Draw measurements
                 ctx.fillStyle = 'red';
                 ctx.beginPath();
-                ctx.arc(i * 8, measurements[i], 2, 0, 2 * Math.PI);
+                ctx.arc(x, measurements[i], 2, 0, 2 * Math.PI);
                 ctx.fill();
                 
                 // Draw estimates
                 ctx.fillStyle = 'blue';
                 ctx.beginPath();
-                ctx.arc(i * 8, estimates[i], 2, 0, 2 * Math.PI);
+                ctx.arc(x, estimates[i], 2, 0, 2 * Math.PI);
                 ctx.fill();
             }
             
@@ -119,12 +126,22 @@
         }
         
         function animate() {
-            if (currentStep < measurements.length) {
-                estimates.push(kalmanStep(measurements[currentStep]));
-                currentStep++;
-                drawFrame();
-                animationId = requestAnimationFrame(animate);
+            // Generate new data point
+            const { true_pos, measurement } = generateNewDataPoint();
+            truePositions.push(true_pos);
+            measurements.push(measurement);
+            estimates.push(kalmanStep(measurement));
+            
+            // Remove old points if array gets too long
+            if (truePositions.length > canvas.width) {
+                truePositions.shift();
+                measurements.shift();
+                estimates.shift();
             }
+            
+            time += 1;
+            drawFrame();
+            animationId = requestAnimationFrame(animate);
         }
         
         function startAnimation() {
@@ -136,15 +153,16 @@
         function resetAnimation() {
             cancelAnimationFrame(animationId);
             animationId = null;
-            currentStep = 0;
-            x = 0;
+            measurements = [];
+            estimates = [];
+            truePositions = [];
+            time = 0;
+            x = 200;
             P = 1.0;
-            generateData();
             drawFrame();
         }
         
         // Initialize
-        generateData();
         drawFrame();
     </script>
 </body>
